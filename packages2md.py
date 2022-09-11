@@ -3,7 +3,7 @@ import sys, subprocess
 __all__=["outputmd"]
 
 pkgs,name2ind=None,None
-def outputmd(filepath:str):
+def outputmd(filepath:str,enable_a:bool=True):
     global pkgs,name2ind
     if pkgs is None or name2ind is None:
         p=subprocess.Popen(sys.executable+" -m pip list",stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
@@ -31,7 +31,7 @@ def outputmd(filepath:str):
                 f.write(" --> ")
                 f.write(" & ".join("pkg{}".format(name2ind[j]) for j in i["Requires"]))
             f.write(";\n")
-            if i["Home-page"]:
+            if enable_a and i["Home-page"]:
                 f.write("click {} href \"{}\";\n".format("pkg{}".format(name2ind[i["Name"]]),i["Home-page"]))
         f.write("```")
 
