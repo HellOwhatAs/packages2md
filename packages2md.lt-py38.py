@@ -1,27 +1,58 @@
-import sys, subprocess
+from pip import main
+from io import StringIO
+import sys
+from typing import List,Dict,Union,Tuple
 
-__all__=["outputmd"]
+__all__=["pkgs_info", "outputmd"]
 
-pkgs,name2ind=None,None
-def outputmd(filepath:str,enable_a:bool=True):
-    global pkgs,name2ind
-    if pkgs is None or name2ind is None:
-        p=subprocess.Popen(sys.executable+" -m pip list",stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
-        pkgs=p.stdout.read().decode('utf-8').replace('\r','').replace('_','-').lower()
-        p.stdout.close()
+def pkgs_info()->Tuple[List[Dict[str, Union[str,None,List[str]]]],Dict[str,int]]:
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+    main(["list"])
+    sys.stdout = old_stdout
+    
+    pkgs=[]
+    for i in mystdout.getvalue().replace('\r','').replace('_','-').lower().split('\n')[2:]:
+        _=i.split()
+        if _:pkgs.append(_[0])
 
-        pkgs=([i.split()[0] for i in pkgs.split('\n')[2:] if (i.split())])
+    old_stdout = sys.stdout
+    sys.stdout = mystdout = StringIO()
+    main(["show"]+pkgs)
+    sys.stdout=old_stdout
 
-        p=subprocess.Popen(sys.executable+" -m pip show "+" ".join(pkgs),stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=False)
-        pkgs=[({i.split(': ')[0]:(None if i.split(': ')[1]=="UNKNOWN" or not i.split(': ')[1] else i.split(': ')[1]) for i in part.split('\n') if len(i.split(': '))>1}) for part in p.stdout.read().decode('utf-8').replace('\r','').split('\n---\n')]
-        p.stdout.close()
+    pkgs=[]
+    for part in mystdout.getvalue().replace('\r','').split('\n---\n'):
+        i={}
+        for _i in part.split('\n'):
+            _=_i.split(': ')
+            if len(_)>1:
+                i[_[0]]=(None if _[1]=="UNKNOWN" or not _[1] else _[1])
+        i["Name"]=i["Name"].replace('_','-').lower()
+        
+        if i["Requires"]:
+            __=[]
+            for j in i["Requires"].replace('_','-').lower().split(','):
+                _=j.strip()
+                if _:__.append(_)
+            i["Requires"]=__
+        else:i["Requires"]=[]
+        if i["Required-by"]:
+            __=[]
+            for j in i["Required-by"].replace('_','-').lower().split(','):
+                _=j.strip()
+                if _:__.append(_)
+            i["Required-by"]=__
+        else:i["Required-by"]=[]
+        
+        pkgs.append(i)
+    
+    return pkgs,{i["Name"]:ind for ind,i in enumerate(pkgs)}
 
-        for i in pkgs:
-            i["Name"]=i["Name"].replace('_','-').lower()
-            i["Requires"]=[j.strip() for j in i["Requires"].replace('_','-').lower().split(',') if (j.strip())] if i["Requires"] else []
-            i["Required-by"]=[j.strip() for j in i["Required-by"].replace('_','-').lower().split(',') if (j.strip())] if i["Required-by"] else []
+def outputmd(filepath:str,enable_a:bool=True,_pkgs_info:Union[Tuple[List[Dict[str, Union[str,None,List[str]]]],Dict[str,int]],None]=None):
 
-        name2ind={i["Name"]:ind for ind,i in enumerate(pkgs)}
+    if _pkgs_info is None:pkgs,name2ind=pkgs_info()
+    else:pkgs,name2ind=_pkgs_info
 
     with open(filepath,'w') as f:
         f.write("```mermaid\ngraph LR;\n")
